@@ -1,0 +1,74 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ifespinosap
+//@version=5
+strategy("BOT MACD", overlay = true, initial_capital=100, currency = currency.USDT, default_qty_type=strategy.percent_of_equity, default_qty_value=20)
+//Variables usadas para calcular indicadores
+rsi_period = input(14, "Período RSI")
+shortema_period = input(14, "Longitud Short EMA")
+longema_period = input(14, "Longitud Long EMA")
+fastInput = input(12, "Fast length")
+slowInput = input(26, "Slow length")
+MaxSL = input(0.5,"Max SL")
+TProfit = input(0.017,"Take Profit")
+SLoss = input(0.01,"STOP LOSS")
+//Arrays usados para almacenar los valores del histograma
+var positive = array.new_float(0)
+var negative = array.new_float(0)
+//Tamaño de la orden
+float ordersize=0
+ordersize:=(strategy.initial_capital)/close
+//Tiempo
+t1 = time(timeframe.period, "0000-0000:23456")
+//MACD
+[macdLine, signalLine, histLine] = ta.macd(close, fastInput, slowInput, 9)
+//EMA
+short_ema=ta.ema(close[0],shortema_period)
+long_ema=ta.ema(close[0],longema_period)
+//VWAP
+vwap_now = ta.vwap(close)
+//RSI
+float RSIx = math.round(ta.rsi(close[0],rsi_period))
+float RSIy = math.round(ta.rsi(close[1],rsi_period))
+//Cruce del histograma
+c_hist=ta.cross(histLine,0)
+c_macd=ta.cross(macdLine,signalLine)
+//Variables usadas para el TP Y SL
+var float SL_BUY = 0
+var float SL_SELL = 0
+var float TP_BUY = 0
+var float TP_SELL = 0
+//Determinación de tendencia
+//Operativa para cortos
+if (high[0]<short_ema or high[0]<long_ema)
+    if (RSIx<=(RSIy) and close<vwap_now and t1>0)
+        if (histLine<0 and array.max(positive)<=array.max(negative))
+            if(c_macd==true and strategy.position_size==0)
+                if(((1+SLoss)*vwap_now-close)>((1+MaxSL*0.01)*close-close))
+                    SL_BUY := (1+MaxSL*0.01)*close
+                if(((1+SLoss)*vwap_now-close)<=((1+MaxSL*0.01)*close-close))
+                    SL_BUY := (1+SLoss)*vwap_now
+                TP_BUY := (1-TProfit)*close
+                strategy.entry("sell", strategy.short,qty=2*ordersize,comment="Open Short")
+                strategy.exit("Exit Short", from_entry="sell",stop=SL_BUY,trail_price=TP_BUY,trail_offset=10,comment="Close Short")
+//Operativa para largos
+if (low[0]>short_ema or low[0]>long_ema)
+    if (RSIx>=(RSIy) and close>vwap_now and t1>0)
+        if (histLine>0 and array.max(positive)>=array.max(negative))
+            if(c_macd==true and strategy.position_size==0)
+                if((close-(1-SLoss)*vwap_now)>(close-(1-MaxSL*0.01)*close))
+                    SL_SELL :=(1-MaxSL*0.01)*close
+                if((close-(1-SLoss)*vwap_now)<=(close-(1-MaxSL*0.01)*close))
+                    SL_SELL := (1-SLoss)*vwap_now
+                TP_SELL := (1+TProfit)*close
+                strategy.entry("buy", strategy.long,qty=2*ordersize,comment="Open Long")
+                strategy.exit("Exit Long", from_entry="buy",stop=SL_SELL,trail_price=TP_SELL,trail_offset=10,comment="Close Long")
+//Histograma positivo
+if(c_macd==true and histLine>0)
+    array.clear(positive)
+if (histLine>0)
+    array.push(positive,math.abs(histLine))
+//Histograma negativo
+if(c_macd==true and histLine<0)
+    array.clear(negative)
+if (histLine<0)
+    array.push(negative,math.abs(histLine))
